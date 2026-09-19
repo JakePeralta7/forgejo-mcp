@@ -1,0 +1,14 @@
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+tests/
+*.egg-info
+dist/
+build/
+.git
+.github/
+Dockerfile
+AGENTS.md
+LICENSE
+pyrightconfig.json
