@@ -11,6 +11,7 @@ from forgejo_mcp.helpers.files import (
     do_get_commit,
     do_get_file_content,
     do_list_repo_commits,
+    do_list_repo_files,
     do_update_file,
 )
 
@@ -114,3 +115,159 @@ class TestDeleteFile:
         assert args[0] == "DELETE"
         assert args[1] == "/repos/owner/repo/contents/a.txt"
         assert kwargs["json"]["sha"] == "abc"
+
+
+def _resp(payload, headers=None, status=200):
+    r = MagicMock()
+    r.json.return_value = payload
+    r.headers = headers or {}
+    r.status_code = status
+    return r
+
+
+class TestListRepoFiles:
+    def test_root_default_branch(self, client):
+        client.request.side_effect = [
+            _resp({"default_branch": "main"}),
+            _resp({
+                "tree": [
+                    {"path": "README.md", "type": "blob", "sha": "sha1", "size": 100, "mode": "100644"},
+                    {"path": "src/main.py", "type": "blob", "sha": "sha2", "size": 200, "mode": "100644"},
+                    {"path": "src/utils.py", "type": "blob", "sha": "sha3", "size": 150, "mode": "100644"},
+                    {"path": "tests/test.py", "type": "blob", "sha": "sha4", "size": 300, "mode": "100644"},
+                ]
+            }),
+        ]
+        result = do_list_repo_files(client, "owner", "repo")
+        assert result["total_count"] == 4
+        assert len(result["items"]) == 4
+        assert result["items"][0]["path"] == "README.md"
+        assert result["items"][0]["type"] == "blob"
+        assert client.request.call_args_list[0].args[1] == "/repos/owner/repo"
+        assert client.request.call_args_list[1].args[1] == "/repos/owner/repo/git/trees/main"
+        assert client.request.call_args_list[1].kwargs["params"] == {"recursive": "1", "per_page": 1000}
+
+    def test_with_ref(self, client):
+        client.request.side_effect = [
+            _resp({
+                "tree": [
+                    {"path": "README.md", "type": "blob", "sha": "sha1", "size": 100, "mode": "100644"},
+                ]
+            }),
+        ]
+        result = do_list_repo_files(client, "owner", "repo", ref="v1.0.0")
+        assert result["total_count"] == 1
+        assert client.request.call_args.args[1] == "/repos/owner/repo/git/trees/v1.0.0"
+
+    def test_path_filter(self, client):
+        client.request.side_effect = [
+            _resp({"default_branch": "main"}),
+            _resp({
+                "tree": [
+                    {"path": "README.md", "type": "blob", "sha": "sha1", "size": 100, "mode": "100644"},
+                    {"path": "src/main.py", "type": "blob", "sha": "sha2", "size": 200, "mode": "100644"},
+                    {"path": "src/utils.py", "type": "blob", "sha": "sha3", "size": 150, "mode": "100644"},
+                    {"path": "tests/test.py", "type": "blob", "sha": "sha4", "size": 300, "mode": "100644"},
+                ]
+            }),
+        ]
+        result = do_list_repo_files(client, "owner", "repo", path="/src/")
+        assert result["total_count"] == 2
+        assert result["items"][0]["path"] == "src/main.py"
+        assert result["items"][1]["path"] == "src/utils.py"
+
+    def test_path_without_trailing_slash(self, client):
+        client.request.side_effect = [
+            _resp({"default_branch": "main"}),
+            _resp({
+                "tree": [
+                    {"path": "src/main.py", "type": "blob", "sha": "sha2", "size": 200, "mode": "100644"},
+                    {"path": "src/utils.py", "type": "blob", "sha": "sha3", "size": 150, "mode": "100644"},
+                ]
+            }),
+        ]
+        result = do_list_repo_files(client, "owner", "repo", path="/src")
+        assert result["total_count"] == 2
+
+    def test_depth_zero(self, client):
+        client.request.side_effect = [
+            _resp({"default_branch": "main"}),
+            _resp({
+                "tree": [
+                    {"path": "README.md", "type": "blob", "sha": "sha1", "size": 100, "mode": "100644"},
+                    {"path": "src/main.py", "type": "blob", "sha": "sha2", "size": 200, "mode": "100644"},
+                    {"path": "src/utils.py", "type": "blob", "sha": "sha3", "size": 150, "mode": "100644"},
+                    {"path": "src/sub/deep.py", "type": "blob", "sha": "sha4", "size": 300, "mode": "100644"},
+                ]
+            }),
+        ]
+        result = do_list_repo_files(client, "owner", "repo", depth=0)
+        assert result["total_count"] == 1
+        assert result["items"][0]["path"] == "README.md"
+
+    def test_depth_one(self, client):
+        client.request.side_effect = [
+            _resp({"default_branch": "main"}),
+            _resp({
+                "tree": [
+                    {"path": "README.md", "type": "blob", "sha": "sha1", "size": 100, "mode": "100644"},
+                    {"path": "src/main.py", "type": "blob", "sha": "sha2", "size": 200, "mode": "100644"},
+                    {"path": "src/utils.py", "type": "blob", "sha": "sha3", "size": 150, "mode": "100644"},
+                    {"path": "src/sub/deep.py", "type": "blob", "sha": "sha4", "size": 300, "mode": "100644"},
+                ]
+            }),
+        ]
+        result = do_list_repo_files(client, "owner", "repo", depth=1)
+        assert result["total_count"] == 3
+        paths = {item["path"] for item in result["items"]}
+        assert paths == {"README.md", "src/main.py", "src/utils.py"}
+
+    def test_depth_with_path(self, client):
+        client.request.side_effect = [
+            _resp({"default_branch": "main"}),
+            _resp({
+                "tree": [
+                    {"path": "src/main.py", "type": "blob", "sha": "sha2", "size": 200, "mode": "100644"},
+                    {"path": "src/utils.py", "type": "blob", "sha": "sha3", "size": 150, "mode": "100644"},
+                    {"path": "src/sub/deep.py", "type": "blob", "sha": "sha4", "size": 300, "mode": "100644"},
+                    {"path": "src/sub/nested/deeper.py", "type": "blob", "sha": "sha5", "size": 400, "mode": "100644"},
+                ]
+            }),
+        ]
+        result = do_list_repo_files(client, "owner", "repo", path="/src/", depth=1)
+        assert result["total_count"] == 3
+        paths = {item["path"] for item in result["items"]}
+        assert paths == {"src/main.py", "src/utils.py", "src/sub/deep.py"}
+
+    def test_includes_directories(self, client):
+        client.request.side_effect = [
+            _resp({"default_branch": "main"}),
+            _resp({
+                "tree": [
+                    {"path": "src/main.py", "type": "blob", "sha": "sha1", "size": 100, "mode": "100644"},
+                    {"path": "src/", "type": "tree", "sha": "sha2", "size": 0, "mode": "040000"},
+                    {"path": "src/sub/", "type": "tree", "sha": "sha3", "size": 0, "mode": "040000"},
+                ]
+            }),
+        ]
+        result = do_list_repo_files(client, "owner", "repo")
+        assert result["total_count"] == 3
+        types = {item["type"] for item in result["items"]}
+        assert types == {"blob", "tree"}
+
+    def test_empty_tree(self, client):
+        client.request.side_effect = [
+            _resp({"default_branch": "main"}),
+            _resp({"tree": []}),
+        ]
+        result = do_list_repo_files(client, "owner", "repo")
+        assert result["total_count"] == 0
+        assert result["items"] == []
+
+    def test_invalid_path_no_leading_slash(self, client):
+        with pytest.raises(RuntimeError, match="path must start with '/'"):
+            do_list_repo_files(client, "owner", "repo", path="src/")
+
+    def test_invalid_depth(self, client):
+        with pytest.raises(RuntimeError, match="depth must be >= -1"):
+            do_list_repo_files(client, "owner", "repo", depth=-2)

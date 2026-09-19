@@ -128,6 +128,81 @@ def do_delete_file(
     ).json()
 
 
+@forgejo_errors
+def do_list_repo_files(
+    client: httpx.Client,
+    owner: str,
+    repo: str,
+    path: str = "/",
+    depth: int = -1,
+    ref: str | None = None,
+) -> dict[str, Any]:
+    """List files in a repository using the Git tree API.
+    
+    Args:
+        client: HTTP client
+        owner: Repository owner
+        repo: Repository name
+        path: Starting path (default: "/", root). Must start with "/".
+        depth: Maximum depth to traverse (0-based: 0=starting dir only, 
+               1=one level deeper, -1=unlimited). Default: -1.
+        ref: Branch, tag, or commit SHA (default: repository's default branch)
+    """
+    if not path.startswith("/"):
+        raise ValueError("path must start with '/'")
+    if depth < -1:
+        raise ValueError("depth must be >= -1")
+    
+    # Resolve the commit SHA
+    if ref:
+        tree_sha = ref
+    else:
+        repo_info = request(client, "GET", f"/repos/{owner}/{repo}").json()
+        tree_sha = repo_info.get("default_branch", "main")
+    
+    # Fetch the tree recursively
+    resp = request(
+        client,
+        "GET",
+        f"/repos/{owner}/{repo}/git/trees/{tree_sha}",
+        params={"recursive": "1", "per_page": 1000},
+    )
+    tree_data = resp.json()
+    
+    entries = tree_data.get("tree", [])
+    if not entries:
+        return {"items": [], "total_count": 0}
+    
+    # Normalize path for prefix matching
+    norm_path = path.lstrip("/")
+    if norm_path and not norm_path.endswith("/"):
+        norm_path += "/"
+    
+    base_depth = norm_path.count("/")
+    
+    filtered: list[dict[str, Any]] = []
+    for entry in entries:
+        entry_path = entry.get("path", "")
+        if norm_path and not entry_path.startswith(norm_path):
+            continue
+        if entry_path == norm_path.rstrip("/"):
+            continue  # skip the directory itself
+        
+        entry_depth = entry_path.count("/") - base_depth
+        if depth >= 0 and entry_depth > depth:
+            continue
+        
+        filtered.append({
+            "path": entry_path,
+            "type": entry.get("type"),
+            "sha": entry.get("sha"),
+            "size": entry.get("size"),
+            "mode": entry.get("mode"),
+        })
+    
+    return {"items": filtered, "total_count": len(filtered)}
+
+
 @mcp.tool(annotations=READ_ONLY)
 def get_file_content(owner: str, repo: str, filepath: str, ref: str | None = None) -> dict[str, Any]:
     """Read a file. UTF-8 content returns as text; anything else as base64."""
@@ -146,6 +221,27 @@ def list_repo_commits(
 def get_commit(owner: str, repo: str, sha: str) -> dict[str, Any]:
     """Get a single commit by SHA."""
     return do_get_commit(get_client(), owner, repo, sha)
+
+
+@mcp.tool(annotations=READ_ONLY)
+def list_repo_files(
+    owner: str,
+    repo: str,
+    path: str = "/",
+    depth: int = -1,
+    ref: str | None = None,
+) -> dict[str, Any]:
+    """List files in a repository.
+    
+    Args:
+        owner: Repository owner
+        repo: Repository name
+        path: Starting path (default: "/", root). Must start with "/".
+        depth: Maximum depth to traverse (0-based: 0=starting dir only,
+               1=one level deeper, -1=unlimited). Default: -1.
+        ref: Branch, tag, or commit SHA (default: repository's default branch)
+    """
+    return do_list_repo_files(get_client(), owner, repo, path, depth, ref)
 
 
 @mcp.tool()
