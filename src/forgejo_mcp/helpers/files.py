@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import base64 as b64
+import logging
 from typing import Any
 
 import httpx
 
 from forgejo_mcp.client import list_page, pagination_params, request
-from forgejo_mcp.server import READ_ONLY, forgejo_errors, get_client, mcp
+from forgejo_mcp.server import READ_ONLY, READ_ONLY_MODE, forgejo_errors, get_client, logger, mcp
 
 
 @forgejo_errors
@@ -206,6 +207,7 @@ def do_list_repo_files(
 @mcp.tool(annotations=READ_ONLY)
 def get_file_content(owner: str, repo: str, filepath: str, ref: str | None = None) -> dict[str, Any]:
     """Read a file. UTF-8 content returns as text; anything else as base64."""
+    logger.debug("get_file_content", extra={"owner": owner, "repo": repo, "filepath": filepath, "ref": ref})
     return do_get_file_content(get_client(), owner, repo, filepath, ref)
 
 
@@ -214,12 +216,14 @@ def list_repo_commits(
     owner: str, repo: str, branch: str | None = None, page: int | None = None, limit: int | None = None
 ) -> dict[str, Any]:
     """List commits in a repository (``branch`` optional)."""
+    logger.debug("list_repo_commits", extra={"owner": owner, "repo": repo, "branch": branch, "page": page, "limit": limit})
     return do_list_repo_commits(get_client(), owner, repo, branch, page, limit)
 
 
 @mcp.tool(annotations=READ_ONLY)
 def get_commit(owner: str, repo: str, sha: str) -> dict[str, Any]:
     """Get a single commit by SHA."""
+    logger.debug("get_commit", extra={"owner": owner, "repo": repo, "sha": sha})
     return do_get_commit(get_client(), owner, repo, sha)
 
 
@@ -241,46 +245,74 @@ def list_repo_files(
                1=one level deeper, -1=unlimited). Default: -1.
         ref: Branch, tag, or commit SHA (default: repository's default branch)
     """
+    logger.debug("list_repo_files", extra={"owner": owner, "repo": repo, "path": path, "depth": depth, "ref": ref})
     return do_list_repo_files(get_client(), owner, repo, path, depth, ref)
 
 
-@mcp.tool()
-def create_file(
-    owner: str,
-    repo: str,
-    filepath: str,
-    content: str,
-    message: str,
-    branch: str | None = None,
-    base64: bool = False,
-) -> dict[str, Any]:
-    """Create a file. Set ``base64=true`` when ``content`` is base64-encoded."""
-    return do_create_file(get_client(), owner, repo, filepath, content, message, branch, base64)
+def _register_create_file():
+    if READ_ONLY_MODE:
+        logger.info("skipping_write_tool", extra={"tool": "create_file", "reason": "read_only_mode"})
+        return
+
+    @mcp.tool()
+    def create_file(
+        owner: str,
+        repo: str,
+        filepath: str,
+        content: str,
+        message: str,
+        branch: str | None = None,
+        base64: bool = False,
+    ) -> dict[str, Any]:
+        """Create a file. Set ``base64=true`` when ``content`` is base64-encoded."""
+        logger.debug("create_file", extra={"owner": owner, "repo": repo, "filepath": filepath, "branch": branch})
+        return do_create_file(get_client(), owner, repo, filepath, content, message, branch, base64)
 
 
-@mcp.tool()
-def update_file(
-    owner: str,
-    repo: str,
-    filepath: str,
-    content: str,
-    message: str,
-    branch: str | None = None,
-    sha: str | None = None,
-    base64: bool = False,
-) -> dict[str, Any]:
-    """Update an existing file. ``sha`` is the current file blob SHA."""
-    return do_update_file(get_client(), owner, repo, filepath, content, message, branch, sha, base64)
+_register_create_file()
 
 
-@mcp.tool()
-def delete_file(
-    owner: str,
-    repo: str,
-    filepath: str,
-    message: str,
-    branch: str | None = None,
-    sha: str | None = None,
-) -> dict[str, Any]:
-    """Delete a file."""
-    return do_delete_file(get_client(), owner, repo, filepath, message, branch, sha)
+def _register_update_file():
+    if READ_ONLY_MODE:
+        logger.info("skipping_write_tool", extra={"tool": "update_file", "reason": "read_only_mode"})
+        return
+
+    @mcp.tool()
+    def update_file(
+        owner: str,
+        repo: str,
+        filepath: str,
+        content: str,
+        message: str,
+        branch: str | None = None,
+        sha: str | None = None,
+        base64: bool = False,
+    ) -> dict[str, Any]:
+        """Update an existing file. ``sha`` is the current file blob SHA."""
+        logger.debug("update_file", extra={"owner": owner, "repo": repo, "filepath": filepath, "branch": branch})
+        return do_update_file(get_client(), owner, repo, filepath, content, message, branch, sha, base64)
+
+
+_register_update_file()
+
+
+def _register_delete_file():
+    if READ_ONLY_MODE:
+        logger.info("skipping_write_tool", extra={"tool": "delete_file", "reason": "read_only_mode"})
+        return
+
+    @mcp.tool()
+    def delete_file(
+        owner: str,
+        repo: str,
+        filepath: str,
+        message: str,
+        branch: str | None = None,
+        sha: str | None = None,
+    ) -> dict[str, Any]:
+        """Delete a file."""
+        logger.debug("delete_file", extra={"owner": owner, "repo": repo, "filepath": filepath, "branch": branch})
+        return do_delete_file(get_client(), owner, repo, filepath, message, branch, sha)
+
+
+_register_delete_file()

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
 
 from forgejo_mcp.client import pagination_params, request
-from forgejo_mcp.server import READ_ONLY, forgejo_errors, get_client, mcp
+from forgejo_mcp.server import READ_ONLY, READ_ONLY_MODE, forgejo_errors, get_client, logger, mcp
 
 
 @forgejo_errors
@@ -74,22 +75,33 @@ def list_workflow_runs(
     limit: int | None = None,
 ) -> dict[str, Any]:
     """List Actions workflow runs. Optionally filter by ``status``/``event``."""
+    logger.debug("list_workflow_runs", extra={"owner": owner, "repo": repo, "status": status, "event": event, "page": page, "limit": limit})
     return do_list_workflow_runs(get_client(), owner, repo, status, event, page, limit)
 
 
 @mcp.tool(annotations=READ_ONLY)
 def get_workflow_run(owner: str, repo: str, run_id: int) -> dict[str, Any]:
     """Get a single Actions workflow run by ID."""
+    logger.debug("get_workflow_run", extra={"owner": owner, "repo": repo, "run_id": run_id})
     return do_get_workflow_run(get_client(), owner, repo, run_id)
 
 
-@mcp.tool()
-def dispatch_workflow(
-    owner: str,
-    repo: str,
-    workflow_id: str,
-    ref: str,
-    inputs: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Trigger a workflow run via the ``workflow_dispatch`` event."""
-    return do_dispatch_workflow(get_client(), owner, repo, workflow_id, ref, inputs)
+def _register_dispatch_workflow():
+    if READ_ONLY_MODE:
+        logger.info("skipping_write_tool", extra={"tool": "dispatch_workflow", "reason": "read_only_mode"})
+        return
+
+    @mcp.tool()
+    def dispatch_workflow(
+        owner: str,
+        repo: str,
+        workflow_id: str,
+        ref: str,
+        inputs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Trigger a workflow run via the ``workflow_dispatch`` event."""
+        logger.debug("dispatch_workflow", extra={"owner": owner, "repo": repo, "workflow_id": workflow_id, "ref": ref})
+        return do_dispatch_workflow(get_client(), owner, repo, workflow_id, ref, inputs)
+
+
+_register_dispatch_workflow()

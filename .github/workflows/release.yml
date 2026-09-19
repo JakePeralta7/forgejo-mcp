@@ -4,23 +4,29 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: read
-  packages: write
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
-env:
-  REGISTRY: ghcr.io
+permissions:
+  contents: write
+  packages: write
+  id-token: write
 
 jobs:
   test:
+    name: Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
       - name: Run tests
+        run: uv run pytest -q
+
+      - name: Configure git
         run: |
-          uv sync --group dev
-          uv run pytest -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
   docker:
     needs: test

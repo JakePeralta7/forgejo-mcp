@@ -8,24 +8,39 @@ tools on the shared ``mcp`` server).
 
 from __future__ import annotations
 
+import logging
 import os
+import uuid
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any
 
 import httpx
 from mcp.server import MCPServer
+from mcp.types import ToolAnnotations
+
+from forgejo_mcp.client import create_transport
 
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
 
-READ_ONLY = {"readOnlyHint": True}
+READ_ONLY = ToolAnnotations(read_only_hint=True)
 
 _DEFAULT_TIMEOUT = 30.0
 
 _NAME = "forgejo-mcp"
 _VERSION = "0.1.0"
+
+# Correlation ID for request tracing
+correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)
+
+# Module logger
+logger = logging.getLogger(__name__)
+
+# Global read-only mode flag (set in main() after loading settings)
+READ_ONLY_MODE = False
 
 
 @dataclass(frozen=True)
@@ -35,6 +50,7 @@ class Settings:
     user_agent: str
     timeout: float
     tls_insecure: bool
+    read_only: bool = False
 
 
 def env_bool(name: str, env: Mapping[str, str], default: bool) -> bool:
@@ -70,6 +86,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         user_agent=env.get("FORGEJO_USER_AGENT", "").strip() or f"{_NAME}/{_VERSION}",
         timeout=timeout,
         tls_insecure=env_bool("FORGEJO_TLS_INSECURE", env, False),
+        read_only=env_bool("FORGEJO_READ_ONLY", env, False),
     )
 
 
@@ -83,6 +100,7 @@ def create_client(settings: Settings) -> httpx.Client:
         },
         timeout=settings.timeout,
         verify=not settings.tls_insecure,
+        transport=create_transport(),
     )
 
 
@@ -101,13 +119,34 @@ def get_client() -> httpx.Client:
     return _client
 
 
+def new_correlation_id() -> str:
+    """Generate a new correlation ID for request tracing."""
+    return uuid.uuid4().hex[:12]
+
+
+def set_correlation_id(cid: str | None = None) -> str:
+    """Set and return a correlation ID (generates new if not provided)."""
+    cid = cid or new_correlation_id()
+    correlation_id.set(cid)
+    return cid
+
+
+def get_correlation_id() -> str | None:
+    """Get the current correlation ID."""
+    return correlation_id.get()
+
+
 def forgejo_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
     """Convert httpx/network/validation errors into RuntimeError (MCP isError)."""
 
     @wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
+        cid = set_correlation_id()
+        logger.debug("tool_call_start", extra={"correlation_id": cid, "tool": fn.__name__, "args": _safe_args(args, kwargs)})
         try:
-            return fn(*args, **kwargs)
+            result = fn(*args, **kwargs)
+            logger.debug("tool_call_end", extra={"correlation_id": cid, "tool": fn.__name__, "success": True})
+            return result
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             try:
@@ -116,13 +155,32 @@ def forgejo_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
             except (ValueError, AttributeError):
                 message = None
             text = message or exc.response.text.strip() or exc.__class__.__name__
+            logger.error("tool_call_error", extra={"correlation_id": cid, "tool": fn.__name__, "error": f"HTTP {status}: {text}"})
             raise RuntimeError(f"HTTP {status}: {text}") from exc
         except (httpx.TransportError, httpx.HTTPError, OSError) as exc:
+            logger.error("tool_call_error", extra={"correlation_id": cid, "tool": fn.__name__, "error": str(exc)})
             raise RuntimeError(str(exc).strip() or exc.__class__.__name__) from exc
         except ValueError as exc:
+            logger.error("tool_call_error", extra={"correlation_id": cid, "tool": fn.__name__, "error": str(exc)})
             raise RuntimeError(str(exc).strip() or exc.__class__.__name__) from exc
 
     return wrapper
+
+
+def _safe_args(args: tuple, kwargs: dict) -> dict:
+    """Return a safe representation of args for logging (redact sensitive data)."""
+    safe = {}
+    for i, arg in enumerate(args):
+        if isinstance(arg, str) and ("token" in arg.lower() or "secret" in arg.lower() or "password" in arg.lower()):
+            safe[f"arg_{i}"] = "[REDACTED]"
+        else:
+            safe[f"arg_{i}"] = str(arg)[:200]
+    for k, v in kwargs.items():
+        if "token" in k.lower() or "secret" in k.lower() or "password" in k.lower():
+            safe[k] = "[REDACTED]"
+        else:
+            safe[k] = str(v)[:200]
+    return safe
 
 
 mcp = MCPServer(_NAME)
@@ -135,8 +193,19 @@ from forgejo_mcp.helpers import actions, files, issues, orgs, pulls, repos, user
 
 
 def main() -> None:
-    global _client
+    global _client, READ_ONLY_MODE
     settings = load_settings()
+    READ_ONLY_MODE = settings.read_only
+    
+    # Configure logging to stderr (never stdout for stdio transport)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s [%(correlation_id)s] %(message)s",
+        handlers=[logging.StreamHandler()],
+    )
+    
+    logger.info("server_start", extra={"correlation_id": "init", "read_only": READ_ONLY_MODE, "version": _VERSION})
+    
     _client = create_client(settings)
     mcp.run(transport="stdio")
 

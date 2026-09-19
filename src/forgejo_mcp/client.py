@@ -13,6 +13,17 @@ import httpx
 
 MAX_PAGE_LIMIT = 100
 
+_DEFAULT_LIMITS = httpx.Limits(
+    max_connections=20,
+    max_keepalive_connections=5,
+    keepalive_expiry=30.0,
+)
+
+
+def create_transport(limits: httpx.Limits | None = None) -> httpx.BaseTransport:
+    """Create an HTTP transport with connection pooling configuration."""
+    return httpx.HTTPTransport(limits=limits or _DEFAULT_LIMITS)
+
 
 def request(
     client: httpx.Client,

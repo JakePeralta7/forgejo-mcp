@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
 
 from forgejo_mcp.client import list_page, pagination_params, request
-from forgejo_mcp.server import READ_ONLY, forgejo_errors, get_client, mcp
+from forgejo_mcp.server import READ_ONLY, READ_ONLY_MODE, forgejo_errors, get_client, logger, mcp
 
 
 @forgejo_errors
@@ -145,53 +146,84 @@ def list_pull_requests(
     limit: int | None = None,
 ) -> dict[str, Any]:
     """List pull requests. ``state`` in open/closed/all."""
+    logger.debug("list_pull_requests", extra={"owner": owner, "repo": repo, "state": state, "page": page, "limit": limit})
     return do_list_pull_requests(get_client(), owner, repo, state, page, limit)
 
 
 @mcp.tool(annotations=READ_ONLY)
 def get_pull_request(owner: str, repo: str, index: int) -> dict[str, Any]:
     """Get a pull request by its numeric index."""
+    logger.debug("get_pull_request", extra={"owner": owner, "repo": repo, "index": index})
     return do_get_pull_request(get_client(), owner, repo, index)
 
 
-@mcp.tool()
-def create_pull_request(
-    owner: str, repo: str, title: str, head: str, base: str, body: str | None = None
-) -> dict[str, Any]:
-    """Create a pull request. ``head`` is the source branch, ``base`` the target."""
-    return do_create_pull_request(get_client(), owner, repo, title, head, base, body)
+def _register_create_pull_request():
+    if READ_ONLY_MODE:
+        logger.info("skipping_write_tool", extra={"tool": "create_pull_request", "reason": "read_only_mode"})
+        return
+
+    @mcp.tool()
+    def create_pull_request(
+        owner: str, repo: str, title: str, head: str, base: str, body: str | None = None
+    ) -> dict[str, Any]:
+        """Create a pull request. ``head`` is the source branch, ``base`` the target."""
+        logger.debug("create_pull_request", extra={"owner": owner, "repo": repo, "title": title, "head": head, "base": base})
+        return do_create_pull_request(get_client(), owner, repo, title, head, base, body)
 
 
-@mcp.tool()
-def update_pull_request(
-    owner: str,
-    repo: str,
-    index: int,
-    title: str | None = None,
-    body: str | None = None,
-    state: str | None = None,
-) -> dict[str, Any]:
-    """Update a pull request's title, body, and/or state."""
-    return do_update_pull_request(get_client(), owner, repo, index, title, body, state)
+_register_create_pull_request()
 
 
-@mcp.tool()
-def merge_pull_request(
-    owner: str, repo: str, index: int, method: str = "merge"
-) -> dict[str, Any]:
-    """Merge a pull request. ``method`` in merge/rebase/rebase-merge/squash/fast-forward-only/manually-merged."""
-    return do_merge_pull_request(get_client(), owner, repo, index, method)
+def _register_update_pull_request():
+    if READ_ONLY_MODE:
+        logger.info("skipping_write_tool", extra={"tool": "update_pull_request", "reason": "read_only_mode"})
+        return
+
+    @mcp.tool()
+    def update_pull_request(
+        owner: str,
+        repo: str,
+        index: int,
+        title: str | None = None,
+        body: str | None = None,
+        state: str | None = None,
+    ) -> dict[str, Any]:
+        """Update a pull request's title, body, and/or state."""
+        logger.debug("update_pull_request", extra={"owner": owner, "repo": repo, "index": index})
+        return do_update_pull_request(get_client(), owner, repo, index, title, body, state)
+
+
+_register_update_pull_request()
+
+
+def _register_merge_pull_request():
+    if READ_ONLY_MODE:
+        logger.info("skipping_write_tool", extra={"tool": "merge_pull_request", "reason": "read_only_mode"})
+        return
+
+    @mcp.tool()
+    def merge_pull_request(
+        owner: str, repo: str, index: int, method: str = "merge"
+    ) -> dict[str, Any]:
+        """Merge a pull request. ``method`` in merge/rebase/rebase-merge/squash/fast-forward-only/manually-merged."""
+        logger.debug("merge_pull_request", extra={"owner": owner, "repo": repo, "index": index, "method": method})
+        return do_merge_pull_request(get_client(), owner, repo, index, method)
+
+
+_register_merge_pull_request()
 
 
 @mcp.tool(annotations=READ_ONLY)
 def list_pull_reviews(owner: str, repo: str, index: int) -> dict[str, Any]:
     """List reviews on a pull request."""
+    logger.debug("list_pull_reviews", extra={"owner": owner, "repo": repo, "index": index})
     return do_list_pull_reviews(get_client(), owner, repo, index)
 
 
 @mcp.tool(annotations=READ_ONLY)
 def get_pull_review(owner: str, repo: str, index: int, review_id: int) -> dict[str, Any]:
     """Get a specific review on a pull request."""
+    logger.debug("get_pull_review", extra={"owner": owner, "repo": repo, "index": index, "review_id": review_id})
     return do_get_pull_review(get_client(), owner, repo, index, review_id)
 
 
@@ -200,17 +232,27 @@ def list_pull_review_comments(
     owner: str, repo: str, index: int, review_id: int
 ) -> dict[str, Any]:
     """List comments on a specific pull request review."""
+    logger.debug("list_pull_review_comments", extra={"owner": owner, "repo": repo, "index": index, "review_id": review_id})
     return do_list_pull_review_comments(get_client(), owner, repo, index, review_id)
 
 
-@mcp.tool()
-def create_pull_review(
-    owner: str,
-    repo: str,
-    index: int,
-    event: str,
-    body: str | None = None,
-    comments: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Submit a pull request review. ``event`` in APPROVED/REQUEST_CHANGES/COMMENT."""
-    return do_create_pull_review(get_client(), owner, repo, index, event, body, comments)
+def _register_create_pull_review():
+    if READ_ONLY_MODE:
+        logger.info("skipping_write_tool", extra={"tool": "create_pull_review", "reason": "read_only_mode"})
+        return
+
+    @mcp.tool()
+    def create_pull_review(
+        owner: str,
+        repo: str,
+        index: int,
+        event: str,
+        body: str | None = None,
+        comments: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Submit a pull request review. ``event`` in APPROVED/REQUEST_CHANGES/COMMENT."""
+        logger.debug("create_pull_review", extra={"owner": owner, "repo": repo, "index": index, "event": event})
+        return do_create_pull_review(get_client(), owner, repo, index, event, body, comments)
+
+
+_register_create_pull_review()
