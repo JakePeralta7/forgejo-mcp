@@ -13,6 +13,9 @@ permissions:
   packages: write
   id-token: write
 
+env:
+  REGISTRY: ghcr.io
+
 jobs:
   test:
     name: Test
