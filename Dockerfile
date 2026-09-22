@@ -9,7 +9,8 @@ COPY --from=ghcr.io/astral-sh/uv@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78
 # Dependencies layer (cached independently of app source).
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --no-deps --target=/install "mcp>=2,<3" "httpx>=0.27"
+    uv export --frozen --no-dev --no-emit-project -o requirements.txt && \
+    uv pip install --target=/install -r requirements.txt
 
 # App layer.
 COPY src ./src
@@ -24,6 +25,7 @@ LABEL org.opencontainers.image.title="forgejo-mcp" \
       org.opencontainers.image.source="https://github.com/JakePeralta7/forgejo-mcp"
 RUN groupadd --system app && useradd --system --gid app --home-dir /nonexistent app
 COPY --from=builder /install/ /usr/local/lib/python3.12/site-packages/
+RUN python -c "import forgejo_mcp.server"
 ENV PYTHONUNBUFFERED=1
 USER app
 ENTRYPOINT ["python", "-m", "forgejo_mcp"]

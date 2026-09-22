@@ -1,6 +1,6 @@
 [project]
 name = "forgejo-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "MCP server (stdio) for the Forgejo REST API: repos, issues, pull requests, files, commits, actions, orgs."
 readme = "README.md"
 requires-python = ">=3.12"

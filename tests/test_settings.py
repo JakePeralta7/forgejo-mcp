@@ -18,7 +18,7 @@ class TestLoadSettings:
         assert s == Settings(
             url="https://codeberg.org",
             access_token="secret",
-            user_agent="forgejo-mcp/0.1.0",
+            user_agent="forgejo-mcp/0.1.1",
             timeout=30.0,
             tls_insecure=False,
         )
@@ -41,7 +41,7 @@ class TestLoadSettings:
 
     def test_blank_optional_user_agent_defaults(self):
         s = load_settings(base_env(FORGEJO_USER_AGENT="   "))
-        assert s.user_agent == "forgejo-mcp/0.1.0"
+        assert s.user_agent == "forgejo-mcp/0.1.1"
 
     def test_missing_url_raises(self):
         with pytest.raises(RuntimeError, match="FORGEJO_URL"):

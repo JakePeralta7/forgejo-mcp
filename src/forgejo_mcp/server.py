@@ -31,7 +31,7 @@ READ_ONLY = ToolAnnotations(read_only_hint=True)
 _DEFAULT_TIMEOUT = 30.0
 
 _NAME = "forgejo-mcp"
-_VERSION = "0.1.0"
+_VERSION = "0.1.1"
 
 # Correlation ID for request tracing
 correlation_id: ContextVar[str | None] = ContextVar("correlation_id", default=None)

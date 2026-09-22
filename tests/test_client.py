@@ -11,7 +11,7 @@ def make_settings(**overrides) -> Settings:
     params = dict(
         url="https://codeberg.org",
         access_token="secret",
-        user_agent="forgejo-mcp/0.1.0",
+        user_agent="forgejo-mcp/0.1.1",
         timeout=30.0,
         tls_insecure=False,
     )
