@@ -24,7 +24,8 @@ LABEL org.opencontainers.image.title="forgejo-mcp" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.source="https://github.com/JakePeralta7/forgejo-mcp"
 RUN groupadd --system app && useradd --system --gid app --home-dir /nonexistent app
-COPY --from=builder /install/ /usr/local/lib/python3.12/site-packages/
+COPY --from=builder /install/ /opt/deps/
+ENV PYTHONPATH=/opt/deps
 RUN python -c "import forgejo_mcp.server"
 ENV PYTHONUNBUFFERED=1
 USER app
