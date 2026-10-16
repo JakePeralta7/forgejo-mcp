@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 WORKDIR /app
 
 # Install uv (pinned by SHA256 for reproducibility)
@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --no-deps --target=/install .
 
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 LABEL org.opencontainers.image.title="forgejo-mcp" \
       org.opencontainers.image.description="MCP server (stdio) for the Forgejo REST API." \
       org.opencontainers.image.licenses="MIT" \
