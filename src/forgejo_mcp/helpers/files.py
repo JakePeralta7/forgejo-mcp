@@ -150,9 +150,9 @@ def do_list_repo_files(
         ref: Branch, tag, or commit SHA (default: repository's default branch)
     """
     if not path.startswith("/"):
-        raise ValueError("path must start with '/'")
+        raise ValueError(f"path: must start with '/' (got {path!r})")
     if depth < -1:
-        raise ValueError("depth must be >= -1")
+        raise ValueError(f"depth: must be >= -1 (got {depth})")
     
     # Resolve the commit SHA
     if ref:

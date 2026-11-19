@@ -18,6 +18,7 @@ environment variables only. Built on the official
 | `FORGEJO_USER_AGENT`      | no       | `forgejo-mcp/<version>`| HTTP `User-Agent` header                                           |
 | `FORGEJO_TIMEOUT`         | no       | `30`                   | HTTP request timeout, seconds                                      |
 | `FORGEJO_TLS_INSECURE`    | no       | `false`                | `true` disables TLS certificate verification (self-signed)         |
+| `FORGEJO_READ_ONLY`       | no       | `false`                | `true` disables all write tools (create/update/delete)             |
 
 Missing `FORGEJO_URL`/`FORGEJO_ACCESS_TOKEN` or an invalid boolean abort
 startup with a clear error. Booleans accept `true/false/1/0/yes/no`

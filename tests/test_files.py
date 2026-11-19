@@ -265,9 +265,9 @@ class TestListRepoFiles:
         assert result["items"] == []
 
     def test_invalid_path_no_leading_slash(self, client):
-        with pytest.raises(RuntimeError, match="path must start with '/'"):
+        with pytest.raises(RuntimeError, match=r"path: must start with '/' \(got 'src/'\)"):
             do_list_repo_files(client, "owner", "repo", path="src/")
 
     def test_invalid_depth(self, client):
-        with pytest.raises(RuntimeError, match="depth must be >= -1"):
+        with pytest.raises(RuntimeError, match=r"depth: must be >= -1 \(got -2\)"):
             do_list_repo_files(client, "owner", "repo", depth=-2)

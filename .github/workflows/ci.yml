@@ -32,3 +32,22 @@ jobs:
 
       - name: Run tests
         run: uv run pytest -q
+
+  typecheck:
+    name: Type Check (pyright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run pyright
+        run: uv run pyright

@@ -95,9 +95,9 @@ class TestPaginationParams:
         assert pagination_params(limit=500)["limit"] == 100
 
     def test_page_below_one_raises(self):
-        with pytest.raises(ValueError, match="page must be >= 1"):
+        with pytest.raises(ValueError, match=r"page: must be >= 1 \(got 0\)"):
             pagination_params(page=0)
 
     def test_limit_below_one_raises(self):
-        with pytest.raises(ValueError, match="limit must be >= 1"):
+        with pytest.raises(ValueError, match=r"limit: must be >= 1 \(got 0\)"):
             pagination_params(limit=0)

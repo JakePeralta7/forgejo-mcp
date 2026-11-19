@@ -52,11 +52,11 @@ def pagination_params(
     params: dict[str, Any] = {}
     if page is not None:
         if page < 1:
-            raise ValueError("page must be >= 1")
+            raise ValueError(f"page: must be >= 1 (got {page})")
         params["page"] = page
     if limit is not None:
         if limit < 1:
-            raise ValueError("limit must be >= 1")
+            raise ValueError(f"limit: must be >= 1 (got {limit})")
         params["limit"] = min(limit, MAX_PAGE_LIMIT)
     return params
 
