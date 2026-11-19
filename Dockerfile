@@ -3,6 +3,9 @@
 FROM python:3.15-slim AS builder
 WORKDIR /app
 
+# Install build dependencies for Rust extensions (pydantic-core, cryptography, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
+
 # Install uv (pinned by SHA256 for reproducibility)
 COPY --from=ghcr.io/astral-sh/uv@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /uvx /bin/
 
